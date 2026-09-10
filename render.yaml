@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: v12-ai-proxy
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: V12_API_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
