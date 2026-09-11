@@ -489,12 +489,18 @@ app.post('/api/chat', async (req, res) => {
       let followUpResponse;
 
       if (useModel === 'groq' && groq) {
-        followUpResponse = await groq.chat.completions.create({
-          model: 'llama-3.1-70b-versatile',
-          messages: followUp,
-          temperature: 0.7,
-          max_tokens: 4096
-        });
+        const followUpModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+        for (const fuModel of followUpModels) {
+          try {
+            followUpResponse = await groq.chat.completions.create({
+              model: fuModel,
+              messages: followUp,
+              temperature: 0.7,
+              max_tokens: 4096
+            });
+            break;
+          } catch (e) { continue; }
+        }
       } else if (useModel === 'openai' && openai) {
         followUpResponse = await openai.chat.completions.create({
           model: 'gpt-4o',
@@ -516,8 +522,8 @@ app.post('/api/chat', async (req, res) => {
         content: followUpResponse.choices[0].message.content,
         model: usedModel,
         tool_calls: assistantMessage.tool_calls.map(tc => ({
-          name: tc.function.name,
-          args: JSON.parse(tc.function.arguments)
+          function: tc.function.name,
+          params: JSON.parse(tc.function.arguments)
         })),
         usage: response.usage
       });
