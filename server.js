@@ -220,12 +220,23 @@ app.get('/health', (req, res) => { res.json({ ok: true, status: 'alive', model: 
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, model, apiKey } = req.body;
+    const { messages, model, apiKey, image } = req.body;
     if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages requis' });
 
     // Truncate context to avoid token limits
     const truncated = truncateContext(messages);
     const fullMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...truncated];
+
+    // If image is provided, add it to the last user message for vision models
+    if (image) {
+      const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+      if (lastUserMsg) {
+        lastUserMsg.content = [
+          { type: 'text', text: lastUserMsg.content },
+          { type: 'image_url', image_url: { url: image } }
+        ];
+      }
+    }
 
     const useModel = model || 'groq';
     let response, usedModel = '';
@@ -237,8 +248,41 @@ app.post('/api/chat', async (req, res) => {
       light: 'qwen/qwen3.6-27b'
     };
 
-    // Try Groq with automatic fallback
-    if (useModel === 'groq' && groq) {
+    // Vision models for image analysis
+    const VISION_MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/Meta-Llama-4-Maverick-17B-128E-Instruct'];
+
+    // If image provided, try vision-capable models first
+    if (image && useModel === 'groq' && groq) {
+      for (const vModel of VISION_MODELS) {
+        try {
+          usedModel = vModel;
+          response = await groq.chat.completions.create({
+            model: vModel,
+            messages: fullMessages,
+            temperature: 0.7,
+            max_tokens: 4096
+          });
+          break;
+        } catch (err) {
+          continue;
+        }
+      }
+      // Try HuggingFace vision model
+      if (!response && hf) {
+        try {
+          usedModel = 'meta-llama/Llama-4-Scout-17B-16E-Instruct';
+          response = await hf.chat.completions.create({
+            model: usedModel,
+            messages: fullMessages,
+            temperature: 0.7,
+            max_tokens: 4096
+          });
+        } catch (err) {}
+      }
+    }
+
+    // Try Groq with automatic fallback (text-only)
+    if (!response && useModel === 'groq' && groq) {
       const tryModels = [MODELS.primary, MODELS.fallback, MODELS.light];
       for (const tryModel of tryModels) {
         try {
