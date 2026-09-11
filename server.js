@@ -226,17 +226,35 @@ app.post('/api/chat', async (req, res) => {
     const useModel = model || 'groq';
     let response, usedModel = '';
 
-    // Try Groq first (free, fast)
+    // Model fallback chain: primary -> fallback -> lighter
+    const MODELS = {
+      primary: 'openai/gpt-oss-120b',
+      fallback: 'openai/gpt-oss-20b',
+      light: 'qwen/qwen3.6-27b'
+    };
+
+    // Try Groq with automatic fallback
     if (useModel === 'groq' && groq) {
-      usedModel = 'openai/gpt-oss-120b';
-      response = await groq.chat.completions.create({
-        model: usedModel,
-        messages: fullMessages,
-        tools: TOOLS,
-        tool_choice: 'auto',
-        temperature: 0.7,
-        max_tokens: 4096
-      });
+      const tryModels = [MODELS.primary, MODELS.fallback, MODELS.light];
+      for (const tryModel of tryModels) {
+        try {
+          usedModel = tryModel;
+          response = await groq.chat.completions.create({
+            model: usedModel,
+            messages: fullMessages,
+            tools: TOOLS,
+            tool_choice: 'auto',
+            temperature: 0.7,
+            max_tokens: 4096
+          });
+          break; // success
+        } catch (err) {
+          if (err.status === 429 && tryModel !== MODELS.light) {
+            continue; // try next model
+          }
+          throw err; // other error
+        }
+      }
     }
     // Try OpenAI
     else if (useModel === 'openai' && openai) {
