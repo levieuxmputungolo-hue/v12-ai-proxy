@@ -12,10 +12,12 @@ const PORT = process.env.PORT || 3001;
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const GROQ_KEY = process.env.GROQ_API_KEY || '';
+const TOGETHER_KEY = process.env.TOGETHER_API_KEY || '';
 const V12_API_KEY = process.env.V12_API_KEY || 'v12-dev-key';
 
 const openai = OPENAI_KEY ? new OpenAI({ apiKey: OPENAI_KEY }) : null;
 const groq = GROQ_KEY ? new Groq({ apiKey: GROQ_KEY }) : null;
+const together = TOGETHER_KEY ? new OpenAI({ apiKey: TOGETHER_KEY, baseURL: 'https://api.together.xyz/v1' }) : null;
 
 // ═══════════════════════════════════════════════════════════
 // SYSTEM PROMPT V12 AI — Structure Role/Consignes/Format
@@ -226,7 +228,7 @@ app.post('/api/chat', async (req, res) => {
     const useModel = model || 'groq';
     let response, usedModel = '';
 
-    // Model fallback chain: primary -> fallback -> lighter
+    // Model fallback chain: primary -> fallback -> lighter -> together
     const MODELS = {
       primary: 'openai/gpt-oss-120b',
       fallback: 'openai/gpt-oss-20b',
@@ -255,6 +257,20 @@ app.post('/api/chat', async (req, res) => {
           throw err; // other error
         }
       }
+      // If Groq failed completely, try Together AI
+      if (!response && together) {
+        try {
+          usedModel = 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo';
+          response = await together.chat.completions.create({
+            model: usedModel,
+            messages: fullMessages,
+            temperature: 0.7,
+            max_tokens: 4096
+          });
+        } catch (err) {
+          // Together also failed
+        }
+      }
     }
     // Try OpenAI
     else if (useModel === 'openai' && openai) {
@@ -268,7 +284,6 @@ app.post('/api/chat', async (req, res) => {
         max_tokens: 4096
       });
     }
-    // Try user-provided OpenAI key
     else if (apiKey) {
       const userOpenAI = new OpenAI({ apiKey });
       usedModel = 'gpt-4o';
@@ -277,6 +292,16 @@ app.post('/api/chat', async (req, res) => {
         messages: fullMessages,
         tools: TOOLS,
         tool_choice: 'auto',
+        temperature: 0.7,
+        max_tokens: 4096
+      });
+    }
+    // Try Together AI as standalone fallback
+    else if (together) {
+      usedModel = 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo';
+      response = await together.chat.completions.create({
+        model: usedModel,
+        messages: fullMessages,
         temperature: 0.7,
         max_tokens: 4096
       });
