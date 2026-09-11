@@ -226,7 +226,7 @@ app.post('/api/chat', async (req, res) => {
 
     // Try Groq first (free, fast)
     if (useModel === 'groq' && groq) {
-      usedModel = 'llama-3.1-8b-instant';
+      usedModel = 'openai/gpt-oss-120b';
       response = await groq.chat.completions.create({
         model: usedModel,
         messages: fullMessages,
