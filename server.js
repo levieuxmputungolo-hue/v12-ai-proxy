@@ -227,48 +227,56 @@ app.post('/api/chat', async (req, res) => {
     const truncated = truncateContext(messages);
     const fullMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...truncated];
 
-    // If image is provided, add it to the last user message for vision models
-    if (image) {
-      const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
-      if (lastUserMsg) {
-        lastUserMsg.content = [
-          { type: 'text', text: lastUserMsg.content },
-          { type: 'image_url', image_url: { url: image } }
-        ];
+    // Ensure all messages have string content (fix array content from previous vision calls)
+    fullMessages.forEach(m => {
+      if (Array.isArray(m.content)) {
+        m.content = m.content.map(c => c.text || '').join(' ');
       }
-    }
+    });
 
     const useModel = model || 'groq';
     let response, usedModel = '';
 
-    // Model fallback chain: primary -> fallback -> lighter -> together
-    const MODELS = {
-      primary: 'openai/gpt-oss-120b',
-      fallback: 'openai/gpt-oss-20b',
-      light: 'qwen/qwen3.6-27b'
-    };
-
-    // Vision models for image analysis
-    const VISION_MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/Meta-Llama-4-Maverick-17B-128E-Instruct'];
-
-    // If image provided, try vision-capable models first
-    if (image && useModel === 'groq' && groq) {
-      for (const vModel of VISION_MODELS) {
-        try {
-          usedModel = vModel;
-          response = await groq.chat.completions.create({
-            model: vModel,
-            messages: fullMessages,
-            temperature: 0.7,
-            max_tokens: 4096
-          });
-          break;
-        } catch (err) {
-          continue;
+    // If image provided, use vision model directly
+    if (image) {
+      // Try Groq vision models
+      if (groq) {
+        const visionModels = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/Meta-Llama-4-Maverick-17B-128E-Instruct'];
+        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+        if (lastUserMsg) {
+          lastUserMsg.content = [
+            { type: 'text', text: lastUserMsg.content },
+            { type: 'image_url', image_url: { url: image } }
+          ];
+        }
+        for (const vm of visionModels) {
+          try {
+            usedModel = vm;
+            response = await groq.chat.completions.create({
+              model: vm,
+              messages: fullMessages,
+              temperature: 0.7,
+              max_tokens: 4096
+            });
+            break;
+          } catch (err) {
+            // Reset content to string for next attempt
+            if (lastUserMsg && Array.isArray(lastUserMsg.content)) {
+              lastUserMsg.content = lastUserMsg.content.map(c => c.text || '').join(' ');
+            }
+            continue;
+          }
         }
       }
-      // Try HuggingFace vision model
+      // Try HuggingFace vision
       if (!response && hf) {
+        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+        if (lastUserMsg) {
+          lastUserMsg.content = [
+            { type: 'text', text: lastUserMsg.content },
+            { type: 'image_url', image_url: { url: image } }
+          ];
+        }
         try {
           usedModel = 'meta-llama/Llama-4-Scout-17B-16E-Instruct';
           response = await hf.chat.completions.create({
@@ -279,7 +287,21 @@ app.post('/api/chat', async (req, res) => {
           });
         } catch (err) {}
       }
+      // If no vision model worked, send text-only description
+      if (!response) {
+        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+        if (lastUserMsg) {
+          lastUserMsg.content = lastUserMsg.content.replace(/\n\[Image jointe\]/, '') + '\n\n[L\'utilisateur a envoye une image mais l\'analyse d\'images n\'est pas disponible pour le moment. Decrivez ce que vous pourriez analyser si vous aviez la capacite de voir les images.]';
+        }
+      }
     }
+
+    // Model fallback chain: primary -> fallback -> lighter -> together
+    const MODELS = {
+      primary: 'openai/gpt-oss-120b',
+      fallback: 'openai/gpt-oss-20b',
+      light: 'qwen/qwen3.6-27b'
+    };
 
     // Try Groq with automatic fallback (text-only)
     if (!response && useModel === 'groq' && groq) {
