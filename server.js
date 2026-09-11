@@ -212,7 +212,7 @@ function authMiddleware(req, res, next) {
 // ═══════════════════════════════════════════════════════════
 // MAIN CHAT ENDPOINT
 // ═══════════════════════════════════════════════════════════
-app.post('/api/chat', authMiddleware, async (req, res) => {
+app.post('/api/chat', async (req, res) => {
   try {
     const { messages, model, apiKey } = req.body;
     if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages requis' });
