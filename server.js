@@ -23,48 +23,62 @@ const together = TOGETHER_KEY ? new OpenAI({ apiKey: TOGETHER_KEY, baseURL: 'htt
 const hf = HF_KEY ? new OpenAI({ apiKey: HF_KEY, baseURL: 'https://api-inference.huggingface.co/v1' }) : null;
 
 // ═══════════════════════════════════════════════════════════
-// IMAGE ANALYSIS with HuggingFace free inference
+// IMAGE ANALYSIS with Groq Vision (llama-4-scout)
 // ═══════════════════════════════════════════════════════════
-async function analyzeImage(base64Image) {
+async function analyzeWithVision(fullMessages, image) {
+  if (!groq) return null;
+  
+  // Ensure only the last user message has image array, rest are strings
+  const visionMessages = fullMessages.map(m => ({
+    role: m.role,
+    content: Array.isArray(m.content) ? m.content.map(c => c.text || '').join(' ') : m.content
+  }));
+  
+  // Add image to last user message
+  const lastUser = visionMessages.findLast(m => m.role === 'user');
+  if (lastUser) {
+    lastUser.content = [
+      { type: 'text', text: lastUser.content.replace(/\n\[Image jointe\]/, '') },
+      { type: 'image_url', image_url: { url: image } }
+    ];
+  }
+  
+  const visionModels = ['meta-llama/llama-4-scout-17b-16e-instruct'];
+  for (const vm of visionModels) {
+    try {
+      console.log('[VISION] Trying', vm);
+      const res = await groq.chat.completions.create({
+        model: vm,
+        messages: visionMessages,
+        temperature: 0.7,
+        max_tokens: 4096
+      });
+      console.log('[VISION] Success with', vm);
+      return res.choices[0].message.content;
+    } catch (err) {
+      console.log('[VISION] Failed:', err.message);
+      continue;
+    }
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════
+// IMAGE ANALYSIS with HuggingFace (fallback)
+// ═══════════════════════════════════════════════════════════
+async function analyzeWithHF(base64Image) {
   if (!HF_KEY) return null;
   try {
     const imageBuffer = Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-    
-    // Use BLIP for image captioning (free on HF)
     const captionRes = await axios.post(
       'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large',
       imageBuffer,
-      { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 30000 }
+      { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 60000 }
     );
     const caption = captionRes.data[0]?.generated_text || '';
-
-    // Use ViT for image classification (free on HF)
-    const classRes = await axios.post(
-      'https://api-inference.huggingface.co/models/google/vit-base-patch16-224',
-      imageBuffer,
-      { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 30000 }
-    );
-    const classes = (classRes.data || []).slice(0, 5).map(c => `${c.label} (${(c.score * 100).toFixed(1)}%)`).join(', ');
-
-    // Use OCR for text extraction
-    let ocrText = '';
-    try {
-      const ocrRes = await axios.post(
-        'https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten',
-        imageBuffer,
-        { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 30000 }
-      );
-      ocrText = ocrRes.data[0]?.generated_text || '';
-    } catch (e) {}
-
-    return {
-      caption: caption,
-      classes: classes,
-      ocr: ocrText,
-      description: `Description: ${caption}\nObjets identifies: ${classes}${ocrText ? '\nTexte detecte: ' + ocrText : ''}`
-    };
+    return caption;
   } catch (err) {
-    console.error('Image analysis error:', err.message);
+    console.error('[HF] Error:', err.message);
     return null;
   }
 }
@@ -83,6 +97,7 @@ Tu es V12 AI, un assistant virtuel avance developpe pour offrir une assistance p
 5. Ne fabrique pas de faits ou d'informations. Si une donnee est inconnue ou hors de portee, indique-le clairement.
 6. Tu connais la RDC, la culture congolaise, Kinshasa, et l'Afrique.
 7. Tu es expert en programmation, sciences, philosophie, cuisine, musique.
+8. QUAND UNE IMAGE EST ENVOYEE avec des donnees d'analyse [Description de l'image] ou [Contenu de l'image analysee], utilise ces informations pour repondre a l'utilisateur. Decris ce que tu vois, analyse le contenu, reponds aux questions a propos de l'image. NE DIS JAMAIS que tu ne peux pas voir l'image si des donnees d'analyse sont presentes.
 
 [FORMAT DE SORTIE]
 - Utilise le balisage Markdown pour structurer tes explications (titres, listes, blocs de code).
@@ -285,20 +300,30 @@ app.post('/api/chat', async (req, res) => {
     const useModel = model || 'groq';
     let response, usedModel = '';
 
-    // If image provided, analyze it with HuggingFace free models
+    // If image provided, try vision model directly
     if (image) {
       console.log('[IMAGE] Received image, length:', image.length);
       try {
-        const imageAnalysis = await analyzeImage(image);
-        console.log('[IMAGE] Analysis:', imageAnalysis ? 'success' : 'null');
-        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
-        if (lastUserMsg) {
-          const baseText = lastUserMsg.content.replace(/\n\[Image jointe\]/, '');
-          if (imageAnalysis) {
-            lastUserMsg.content = baseText + '\n\n[Analyse de l\'image]\n' + imageAnalysis.description;
-            console.log('[IMAGE] Description:', imageAnalysis.description.substring(0, 100));
-          } else {
-            lastUserMsg.content = baseText + '\n\n[L\'utilisateur a envoye une image mais l\'analyse a echoue. Demandez-lui de decrire l\'image.]';
+        // First try Groq vision model (direct image understanding)
+        const visionReply = await analyzeWithVision(fullMessages, image);
+        if (visionReply) {
+          console.log('[IMAGE] Vision model succeeded');
+          const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+          if (lastUserMsg) {
+            lastUserMsg.content = lastUserMsg.content.replace(/\n\[Image jointe\]/, '') + '\n\n[Contenu de l\'image analysee]\n' + visionReply;
+          }
+        } else {
+          // Fallback to HuggingFace captioning
+          console.log('[IMAGE] Vision failed, trying HF...');
+          const hfCaption = await analyzeWithHF(image);
+          const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+          if (lastUserMsg) {
+            const baseText = lastUserMsg.content.replace(/\n\[Image jointe\]/, '');
+            if (hfCaption) {
+              lastUserMsg.content = baseText + '\n\n[Description de l\'image]\n' + hfCaption;
+            } else {
+              lastUserMsg.content = baseText + '\n\n[L\'utilisateur a envoye une image. Les outils d\'analyse ne sont pas disponibles. Demandez-lui de decrire l\'image.]';
+            }
           }
         }
       } catch (imgErr) {
@@ -308,8 +333,6 @@ app.post('/api/chat', async (req, res) => {
           lastUserMsg.content = lastUserMsg.content.replace(/\n\[Image jointe\]/, '') + '\n\n[L\'utilisateur a envoye une image. Demandez-lui de la decrire.]';
         }
       }
-    } else {
-      console.log('[CHAT] No image, text only');
     }
 
     // Model fallback chain: primary -> fallback -> lighter -> together
