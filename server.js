@@ -212,6 +212,8 @@ function authMiddleware(req, res, next) {
 // ═══════════════════════════════════════════════════════════
 // MAIN CHAT ENDPOINT
 // ═══════════════════════════════════════════════════════════
+app.get('/health', (req, res) => { res.json({ ok: true, status: 'alive', model: 'openai/gpt-oss-120b', timestamp: Date.now() }); });
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, model, apiKey } = req.body;
