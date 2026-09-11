@@ -287,19 +287,29 @@ app.post('/api/chat', async (req, res) => {
 
     // If image provided, analyze it with HuggingFace free models
     if (image) {
-      console.log('[IMAGE] Analyzing image...');
-      const imageAnalysis = await analyzeImage(image);
-      console.log('[IMAGE] Analysis result:', imageAnalysis ? 'success' : 'failed');
-      const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
-      if (lastUserMsg) {
-        // Replace image tag with actual analysis
-        const baseText = lastUserMsg.content.replace(/\n\[Image jointe\]/, '');
-        if (imageAnalysis) {
-          lastUserMsg.content = baseText + '\n\n[Analyse de l\'image]\n' + imageAnalysis.description;
-        } else {
-          lastUserMsg.content = baseText + '\n\n[L\'utilisateur a envoye une image. Les outils d\'analyse d\'images ne sont pas disponibles actuellement.]';
+      console.log('[IMAGE] Received image, length:', image.length);
+      try {
+        const imageAnalysis = await analyzeImage(image);
+        console.log('[IMAGE] Analysis:', imageAnalysis ? 'success' : 'null');
+        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+        if (lastUserMsg) {
+          const baseText = lastUserMsg.content.replace(/\n\[Image jointe\]/, '');
+          if (imageAnalysis) {
+            lastUserMsg.content = baseText + '\n\n[Analyse de l\'image]\n' + imageAnalysis.description;
+            console.log('[IMAGE] Description:', imageAnalysis.description.substring(0, 100));
+          } else {
+            lastUserMsg.content = baseText + '\n\n[L\'utilisateur a envoye une image mais l\'analyse a echoue. Demandez-lui de decrire l\'image.]';
+          }
+        }
+      } catch (imgErr) {
+        console.error('[IMAGE] Error:', imgErr.message);
+        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+        if (lastUserMsg) {
+          lastUserMsg.content = lastUserMsg.content.replace(/\n\[Image jointe\]/, '') + '\n\n[L\'utilisateur a envoye une image. Demandez-lui de la decrire.]';
         }
       }
+    } else {
+      console.log('[CHAT] No image, text only');
     }
 
     // Model fallback chain: primary -> fallback -> lighter -> together
