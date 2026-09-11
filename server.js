@@ -13,11 +13,13 @@ const PORT = process.env.PORT || 3001;
 const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const GROQ_KEY = process.env.GROQ_API_KEY || '';
 const TOGETHER_KEY = process.env.TOGETHER_API_KEY || '';
+const HF_KEY = process.env.HF_API_KEY || '';
 const V12_API_KEY = process.env.V12_API_KEY || 'v12-dev-key';
 
 const openai = OPENAI_KEY ? new OpenAI({ apiKey: OPENAI_KEY }) : null;
 const groq = GROQ_KEY ? new Groq({ apiKey: GROQ_KEY }) : null;
 const together = TOGETHER_KEY ? new OpenAI({ apiKey: TOGETHER_KEY, baseURL: 'https://api.together.xyz/v1' }) : null;
+const hf = HF_KEY ? new OpenAI({ apiKey: HF_KEY, baseURL: 'https://api-inference.huggingface.co/v1' }) : null;
 
 // ═══════════════════════════════════════════════════════════
 // SYSTEM PROMPT V12 AI — Structure Role/Consignes/Format
@@ -271,6 +273,20 @@ app.post('/api/chat', async (req, res) => {
           // Together also failed
         }
       }
+      // If Together failed, try HuggingFace
+      if (!response && hf) {
+        try {
+          usedModel = 'meta-llama/Meta-Llama-3.1-70B-Instruct';
+          response = await hf.chat.completions.create({
+            model: usedModel,
+            messages: fullMessages,
+            temperature: 0.7,
+            max_tokens: 4096
+          });
+        } catch (err) {
+          // HF also failed
+        }
+      }
     }
     // Try OpenAI
     else if (useModel === 'openai' && openai) {
@@ -300,6 +316,16 @@ app.post('/api/chat', async (req, res) => {
     else if (together) {
       usedModel = 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo';
       response = await together.chat.completions.create({
+        model: usedModel,
+        messages: fullMessages,
+        temperature: 0.7,
+        max_tokens: 4096
+      });
+    }
+    // Try HuggingFace as standalone fallback
+    else if (hf) {
+      usedModel = 'meta-llama/Meta-Llama-3.1-70B-Instruct';
+      response = await hf.chat.completions.create({
         model: usedModel,
         messages: fullMessages,
         temperature: 0.7,
