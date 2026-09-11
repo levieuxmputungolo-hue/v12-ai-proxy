@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const Groq = require('groq-sdk');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
@@ -30,33 +31,30 @@ async function analyzeImage(base64Image) {
     const imageBuffer = Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ''), 'base64');
     
     // Use BLIP for image captioning (free on HF)
-    const captionRes = await fetch('https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' },
-      body: imageBuffer
-    });
-    const captionData = await captionRes.json();
-    const caption = captionData[0]?.generated_text || '';
+    const captionRes = await axios.post(
+      'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large',
+      imageBuffer,
+      { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 30000 }
+    );
+    const caption = captionRes.data[0]?.generated_text || '';
 
     // Use ViT for image classification (free on HF)
-    const classRes = await fetch('https://api-inference.huggingface.co/models/google/vit-base-patch16-224', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' },
-      body: imageBuffer
-    });
-    const classData = await classRes.json();
-    const classes = (classData || []).slice(0, 5).map(c => `${c.label} (${(c.score * 100).toFixed(1)}%)`).join(', ');
+    const classRes = await axios.post(
+      'https://api-inference.huggingface.co/models/google/vit-base-patch16-224',
+      imageBuffer,
+      { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 30000 }
+    );
+    const classes = (classRes.data || []).slice(0, 5).map(c => `${c.label} (${(c.score * 100).toFixed(1)}%)`).join(', ');
 
     // Use OCR for text extraction
     let ocrText = '';
     try {
-      const ocrRes = await fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' },
-        body: imageBuffer
-      });
-      const ocrData = await ocrRes.json();
-      ocrText = ocrData[0]?.generated_text || '';
+      const ocrRes = await axios.post(
+        'https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten',
+        imageBuffer,
+        { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 30000 }
+      );
+      ocrText = ocrRes.data[0]?.generated_text || '';
     } catch (e) {}
 
     return {
@@ -289,7 +287,9 @@ app.post('/api/chat', async (req, res) => {
 
     // If image provided, analyze it with HuggingFace free models
     if (image) {
+      console.log('[IMAGE] Analyzing image...');
       const imageAnalysis = await analyzeImage(image);
+      console.log('[IMAGE] Analysis result:', imageAnalysis ? 'success' : 'failed');
       const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
       if (lastUserMsg) {
         // Replace image tag with actual analysis
