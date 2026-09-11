@@ -26,7 +26,7 @@ const hf = HF_KEY ? new OpenAI({ apiKey: HF_KEY, baseURL: 'https://api-inference
 // IMAGE ANALYSIS with Groq Vision (llama-4-scout)
 // ═══════════════════════════════════════════════════════════
 async function analyzeWithVision(fullMessages, image) {
-  if (!groq) return null;
+  if (!groq) { console.log('[VISION] No groq'); return null; }
   
   // Ensure only the last user message has image array, rest are strings
   const visionMessages = fullMessages.map(m => ({
@@ -38,10 +38,13 @@ async function analyzeWithVision(fullMessages, image) {
   const lastUser = visionMessages.findLast(m => m.role === 'user');
   if (lastUser) {
     lastUser.content = [
-      { type: 'text', text: lastUser.content.replace(/\n\[Image jointe\]/, '') },
+      { type: 'text', text: 'Decris en detail ce que tu vois dans cette image. Identifie les objets, les personnes, le texte, les couleurs, et tout autre detail pertinent.' },
       { type: 'image_url', image_url: { url: image } }
     ];
   }
+  
+  console.log('[VISION] Messages count:', visionMessages.length);
+  console.log('[VISION] Last msg role:', lastUser?.role, 'content type:', Array.isArray(lastUser?.content) ? 'array' : 'string');
   
   const visionModels = ['meta-llama/llama-4-scout-17b-16e-instruct'];
   for (const vm of visionModels) {
@@ -56,7 +59,7 @@ async function analyzeWithVision(fullMessages, image) {
       console.log('[VISION] Success with', vm);
       return res.choices[0].message.content;
     } catch (err) {
-      console.log('[VISION] Failed:', err.message);
+      console.log('[VISION] Failed:', err.status, err.message?.substring(0, 100));
       continue;
     }
   }
@@ -64,21 +67,25 @@ async function analyzeWithVision(fullMessages, image) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// IMAGE ANALYSIS with HuggingFace (fallback)
+// IMAGE ANALYSIS with HuggingFace (BLIP captioning)
 // ═══════════════════════════════════════════════════════════
 async function analyzeWithHF(base64Image) {
-  if (!HF_KEY) return null;
+  if (!HF_KEY) { console.log('[HF] No key'); return null; }
   try {
-    const imageBuffer = Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    console.log('[HF] Sending image, buffer size:', imageBuffer.length);
+    
     const captionRes = await axios.post(
-      'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large',
+      'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base',
       imageBuffer,
-      { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 60000 }
+      { headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' }, timeout: 120000 }
     );
-    const caption = captionRes.data[0]?.generated_text || '';
+    console.log('[HF] Response:', JSON.stringify(captionRes.data).substring(0, 200));
+    const caption = captionRes.data[0]?.generated_text || captionRes.data.generated_text || '';
     return caption;
   } catch (err) {
-    console.error('[HF] Error:', err.message);
+    console.error('[HF] Error:', err.response?.data ? JSON.stringify(err.response.data).substring(0, 200) : err.message);
     return null;
   }
 }
