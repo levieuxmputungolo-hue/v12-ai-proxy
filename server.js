@@ -22,6 +22,56 @@ const together = TOGETHER_KEY ? new OpenAI({ apiKey: TOGETHER_KEY, baseURL: 'htt
 const hf = HF_KEY ? new OpenAI({ apiKey: HF_KEY, baseURL: 'https://api-inference.huggingface.co/v1' }) : null;
 
 // ═══════════════════════════════════════════════════════════
+// IMAGE ANALYSIS with HuggingFace free inference
+// ═══════════════════════════════════════════════════════════
+async function analyzeImage(base64Image) {
+  if (!HF_KEY) return null;
+  try {
+    const imageBuffer = Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    
+    // Use BLIP for image captioning (free on HF)
+    const captionRes = await fetch('https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' },
+      body: imageBuffer
+    });
+    const captionData = await captionRes.json();
+    const caption = captionData[0]?.generated_text || '';
+
+    // Use ViT for image classification (free on HF)
+    const classRes = await fetch('https://api-inference.huggingface.co/models/google/vit-base-patch16-224', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' },
+      body: imageBuffer
+    });
+    const classData = await classRes.json();
+    const classes = (classData || []).slice(0, 5).map(c => `${c.label} (${(c.score * 100).toFixed(1)}%)`).join(', ');
+
+    // Use OCR for text extraction
+    let ocrText = '';
+    try {
+      const ocrRes = await fetch('https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${HF_KEY}`, 'Content-Type': 'application/octet-stream' },
+        body: imageBuffer
+      });
+      const ocrData = await ocrRes.json();
+      ocrText = ocrData[0]?.generated_text || '';
+    } catch (e) {}
+
+    return {
+      caption: caption,
+      classes: classes,
+      ocr: ocrText,
+      description: `Description: ${caption}\nObjets identifies: ${classes}${ocrText ? '\nTexte detecte: ' + ocrText : ''}`
+    };
+  } catch (err) {
+    console.error('Image analysis error:', err.message);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // SYSTEM PROMPT V12 AI — Structure Role/Consignes/Format
 // ═══════════════════════════════════════════════════════════
 const SYSTEM_PROMPT = `[ROLE ET IDENTITE]
@@ -237,61 +287,17 @@ app.post('/api/chat', async (req, res) => {
     const useModel = model || 'groq';
     let response, usedModel = '';
 
-    // If image provided, use vision model directly
+    // If image provided, analyze it with HuggingFace free models
     if (image) {
-      // Try Groq vision models
-      if (groq) {
-        const visionModels = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/Meta-Llama-4-Maverick-17B-128E-Instruct'];
-        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
-        if (lastUserMsg) {
-          lastUserMsg.content = [
-            { type: 'text', text: lastUserMsg.content },
-            { type: 'image_url', image_url: { url: image } }
-          ];
-        }
-        for (const vm of visionModels) {
-          try {
-            usedModel = vm;
-            response = await groq.chat.completions.create({
-              model: vm,
-              messages: fullMessages,
-              temperature: 0.7,
-              max_tokens: 4096
-            });
-            break;
-          } catch (err) {
-            // Reset content to string for next attempt
-            if (lastUserMsg && Array.isArray(lastUserMsg.content)) {
-              lastUserMsg.content = lastUserMsg.content.map(c => c.text || '').join(' ');
-            }
-            continue;
-          }
-        }
-      }
-      // Try HuggingFace vision
-      if (!response && hf) {
-        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
-        if (lastUserMsg) {
-          lastUserMsg.content = [
-            { type: 'text', text: lastUserMsg.content },
-            { type: 'image_url', image_url: { url: image } }
-          ];
-        }
-        try {
-          usedModel = 'meta-llama/Llama-4-Scout-17B-16E-Instruct';
-          response = await hf.chat.completions.create({
-            model: usedModel,
-            messages: fullMessages,
-            temperature: 0.7,
-            max_tokens: 4096
-          });
-        } catch (err) {}
-      }
-      // If no vision model worked, send text-only description
-      if (!response) {
-        const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
-        if (lastUserMsg) {
-          lastUserMsg.content = lastUserMsg.content.replace(/\n\[Image jointe\]/, '') + '\n\n[L\'utilisateur a envoye une image mais l\'analyse d\'images n\'est pas disponible pour le moment. Decrivez ce que vous pourriez analyser si vous aviez la capacite de voir les images.]';
+      const imageAnalysis = await analyzeImage(image);
+      const lastUserMsg = fullMessages.findLast(m => m.role === 'user');
+      if (lastUserMsg) {
+        // Replace image tag with actual analysis
+        const baseText = lastUserMsg.content.replace(/\n\[Image jointe\]/, '');
+        if (imageAnalysis) {
+          lastUserMsg.content = baseText + '\n\n[Analyse de l\'image]\n' + imageAnalysis.description;
+        } else {
+          lastUserMsg.content = baseText + '\n\n[L\'utilisateur a envoye une image. Les outils d\'analyse d\'images ne sont pas disponibles actuellement.]';
         }
       }
     }
