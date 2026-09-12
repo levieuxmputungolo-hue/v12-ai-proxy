@@ -93,25 +93,17 @@ async function analyzeWithHF(base64Image) {
 // ═══════════════════════════════════════════════════════════
 // SYSTEM PROMPT V12 AI — Structure Role/Consignes/Format
 // ═══════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `Tu es V12 AI, developpe par l'equipe V12 (pas OpenAI/Google). Reponds en francais, sois concis et precis.
+const SYSTEM_PROMPT = `Tu es V12 AI, developpe par l'equipe V12. Reponds en francais, sois concis.
 
-OUTILS DISPONIBLES:
-- create_excel: Tableaux Excel
-- create_pdf: Documents PDF
-- create_cv: CV professionnels
-- play_music: Musique via YouTube (query: nom chanson/artiste)
-- generate_image: Images (prompt en anglais)
-- web_search: Recherche web
-- run_code: Execution JavaScript
+OUTILS: create_excel, create_pdf, create_cv, play_music(query), generate_image(prompt anglais), web_search, run_code.
 
 REGLES:
-- Music: utilise play_music avec query (ex: "Fally Ipupa Tokooos")
-- Image: utilise generate_image avec prompt anglais detaille
-- CV: utilise create_cv avec prenom, nom, titre, experiences, formations, competences
-- PDF: utilise create_pdf avec title et paragraphs/markdown
-- Markdown: titres # ## ###, listes -, citations >, **gras**
-- Tu connais la RDC, Kinshasa, l'Afrique
-- NE DIS JAMAIS que tu es developpe par OpenAI`;
+- Musique: play_music avec query
+- Image: generate_image avec prompt anglais
+- CV: create_cv avec prenom, nom, titre
+- PDF: create_pdf avec title et paragraphs
+- Tu connais la RDC et l'Afrique
+- NE DIS PAS que tu es OpenAI`;
 
 // ═══════════════════════════════════════════════════════════
 // TOOL DEFINITIONS (OpenAI Function Calling format)
@@ -437,7 +429,7 @@ app.post('/api/chat', async (req, res) => {
       light: 'qwen/qwen3.6-27b'
     };
 
-    // Try Groq with automatic fallback (text-only)
+      // Try Groq with automatic fallback (text-only)
     if (!response && useModel === 'groq' && groq) {
       const tryModels = [MODELS.primary, MODELS.fallback, MODELS.light];
       for (const tryModel of tryModels) {
@@ -453,10 +445,11 @@ app.post('/api/chat', async (req, res) => {
           });
           break; // success
         } catch (err) {
-          if (err.status === 429 && tryModel !== MODELS.light) {
+          console.error('Groq model ' + tryModel + ' failed:', err.status, err.message);
+          if (err.status === 429) {
             continue; // try next model
           }
-          throw err; // other error
+          continue; // also continue on other errors
         }
       }
       // If Groq failed completely, try Together AI
