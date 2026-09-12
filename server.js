@@ -129,6 +129,13 @@ Quand l'utilisateur veut ecouter de la musique, jouer une chanson, ou lancer un 
 2. Exemples: "joue du Fally Ipupa", " joue Shape of You", "met de la musique africaine"
 3. L'utilisateur peut aussi demander d'arreter la musique avec "arrete la musique" ou "stop".
 
+[GENERATION D'IMAGES]
+Quand l'utilisateur veut un dessin, une image, un design, ou genere une image:
+1. Utilise generate_image avec une description detaillee (prompt) en anglais.
+2. Inclus le style demande (photo, dessin anime, peinture, 3D, etc.).
+3. Exemples: "un paysage de montagne au coucher du soleil, style photo", "un portrait de femme africaine, style peinture a l'huile"
+4. L'image sera generee et affichee dans le chat.
+
 [CREATION DE CV PROFESSIONNEL]
 Quand l'utilisateur demande un CV, un curriculum vitae, un resume, ou un profile professionnel:
 1. Demande les informations manquantes: nom, prenom, email, telephone, ville, poste vise, experiences, formations, competences, langues, centres interet.
@@ -287,6 +294,22 @@ const TOOLS = [
           action: { type: 'string', enum: ['play', 'stop'], description: 'Action: play pour lancer, stop pour arreter' }
         },
         required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_image',
+      description: 'Genere une image a partir d\'une description textuelle. Utilise quand l\'utilisateur veut un dessin, une image, un design, ou genere une image.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'Description detaillee de l\'image en anglais (ex: "a beautiful African woman wearing traditional clothing, oil painting style, warm colors")' },
+          style: { type: 'string', description: 'Style: photo, anime, painting, 3d, digital_art, etc.' },
+          filename: { type: 'string', description: 'Nom du fichier (optionnel)' }
+        },
+        required: ['prompt']
       }
     }
   }
@@ -572,6 +595,9 @@ app.post('/api/chat', async (req, res) => {
             break;
           case 'play_music':
             result = { action: 'play_music', query: fnArgs.query, action: fnArgs.action || 'play' };
+            break;
+          case 'generate_image':
+            result = { action: 'generate_image', prompt: fnArgs.prompt, style: fnArgs.style, filename: fnArgs.filename };
             break;
           case 'web_search':
             result = await webSearch(fnArgs.query, fnArgs.numResults);
