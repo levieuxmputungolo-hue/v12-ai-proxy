@@ -117,10 +117,19 @@ IMPORTANT: Tu es V12 AI, PAS un produit OpenAI, PAS un produit Google, PAS un pr
 [CAPACITES TECHNIQUES]
 - Tu peux creer des fichiers Excel (.xlsx) via create_excel
 - Tu peux creer des fichiers PDF (.pdf) via create_pdf
+- Tu peux creer des CV professionnels via create_cv
 - Tu peux rechercher sur le web via web_search
 - Tu peux executer du JavaScript via run_code
 - Tu peux analyser des donnees et faire des calculs precis
-- Tu peux aider pour la cuisine, la musique, le dessin, la 3D`;
+- Tu peux aider pour la cuisine, la musique, le dessin, la 3D
+
+[CREATION DE CV PROFESSIONNEL]
+Quand l'utilisateur demande un CV, un curriculum vitae, un resume, ou un profile professionnel:
+1. Demande les informations manquantes: nom, prenom, email, telephone, ville, poste vise, experiences, formations, competences, langues, centres interet.
+2. Utilise create_cv avec toutes les informations collectees.
+3. Le CV sera genere automatiquement avec un design professionnel (en-tete colore, sections bien structurees, police elegante).
+4. Tu peux suggerer des ameliorations au CV (formulation des experiences, competences a ajouter).
+5. Si l'utilisateur donne juste son nom et un poste, genere un CV template avec des placeholders a completer.`;
 
 // ═══════════════════════════════════════════════════════════
 // TOOL DEFINITIONS (OpenAI Function Calling format)
@@ -193,6 +202,70 @@ const TOOLS = [
           language: { type: 'string', description: 'Langage (javascript par defaut)' }
         },
         required: ['code']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_cv',
+      description: 'Cree un CV professionnel au format PDF. Utilise quand l\'utilisateur veut un curriculum vitae, un resume professionnel, ou un profil pour candidature.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Nom du fichier sans extension (ex: CV_Jean_Dupont)' },
+          firstName: { type: 'string', description: 'Prenom' },
+          lastName: { type: 'string', description: 'Nom de famille' },
+          title: { type: 'string', description: 'Titre professionnel ou poste vise (ex: Developpeur Full Stack)' },
+          email: { type: 'string', description: 'Adresse email' },
+          phone: { type: 'string', description: 'Numero de telephone' },
+          city: { type: 'string', description: 'Ville de residence' },
+          country: { type: 'string', description: 'Pays de residence' },
+          summary: { type: 'string', description: 'Resume professionnel (2-3 lignes)' },
+          experiences: {
+            type: 'array',
+            description: 'Liste des experiences professionnelles',
+            items: {
+              type: 'object',
+              properties: {
+                period: { type: 'string', description: 'Periode (ex: 2020-2023)' },
+                role: { type: 'string', description: 'Intitule du poste' },
+                company: { type: 'string', description: 'Nom de l\'entreprise' },
+                location: { type: 'string', description: 'Lieu' },
+                description: { type: 'string', description: 'Description des missions et realisations' }
+              }
+            }
+          },
+          education: {
+            type: 'array',
+            description: 'Liste des formations',
+            items: {
+              type: 'object',
+              properties: {
+                year: { type: 'string', description: 'Annee d\'obtention' },
+                degree: { type: 'string', description: 'Diplome ou titre' },
+                school: { type: 'string', description: 'Etablissement' },
+                details: { type: 'string', description: 'Details supplementaires' }
+              }
+            }
+          },
+          skills: {
+            type: 'array',
+            description: 'Liste des competences techniques',
+            items: { type: 'string' }
+          },
+          languages: {
+            type: 'array',
+            description: 'Liste des langues avec niveau',
+            items: { type: 'string' }
+          },
+          interests: {
+            type: 'array',
+            description: 'Centres d\'interet',
+            items: { type: 'string' }
+          }
+        },
+        required: ['filename', 'firstName', 'lastName', 'title']
       }
     }
   }
