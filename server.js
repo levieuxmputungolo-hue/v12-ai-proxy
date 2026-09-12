@@ -612,6 +612,23 @@ app.post('/api/chat', async (req, res) => {
         });
       }
 
+      // If follow-up failed, return tool results directly
+      if (!followUpResponse || !followUpResponse.choices || !followUpResponse.choices[0]) {
+        var toolSummary = toolResults.map(function(tr) {
+          var r = JSON.parse(tr.content);
+          return r.error || 'Action executee';
+        }).join('\n');
+        return res.json({
+          content: toolSummary || 'Action executee avec succes.',
+          model: usedModel,
+          tool_calls: assistantMessage.tool_calls.map(tc => ({
+            function: tc.function.name,
+            params: JSON.parse(tc.function.arguments)
+          })),
+          usage: response.usage
+        });
+      }
+
       return res.json({
         content: followUpResponse.choices[0].message.content,
         model: usedModel,
