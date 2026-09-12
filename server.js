@@ -123,6 +123,12 @@ IMPORTANT: Tu es V12 AI, PAS un produit OpenAI, PAS un produit Google, PAS un pr
 - Tu peux analyser des donnees et faire des calculs precis
 - Tu peux aider pour la cuisine, la musique, le dessin, la 3D
 
+[MUSIQUE ET MEDIA]
+Quand l'utilisateur veut ecouter de la musique, jouer une chanson, ou lancer un morceau:
+1. Utilise play_music avec le titre de la chanson et l'artiste si disponible.
+2. Exemples: "joue du Fally Ipupa", " joue Shape of You", "met de la musique africaine"
+3. L'utilisateur peut aussi demander d'arreter la musique avec "arrete la musique" ou "stop".
+
 [CREATION DE CV PROFESSIONNEL]
 Quand l'utilisateur demande un CV, un curriculum vitae, un resume, ou un profile professionnel:
 1. Demande les informations manquantes: nom, prenom, email, telephone, ville, poste vise, experiences, formations, competences, langues, centres interet.
@@ -266,6 +272,21 @@ const TOOLS = [
           }
         },
         required: ['filename', 'firstName', 'lastName', 'title']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'play_music',
+      description: 'Joue de la musique. Utilise quand l\'utilisateur veut ecouter de la musique, jouer une chanson, ou lancer un morceau. Utilise YouTube comme source.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Recherche musicale (ex: "Fally Ipupa Tokooos", "Ed Sheeran Shape of You", "musique africaine relaxante")' },
+          action: { type: 'string', enum: ['play', 'stop'], description: 'Action: play pour lancer, stop pour arreter' }
+        },
+        required: ['query']
       }
     }
   }
