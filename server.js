@@ -544,6 +544,10 @@ app.post('/api/chat', async (req, res) => {
       return res.status(500).json({ error: 'Aucun provider AI configure.' });
     }
 
+    if (!response || !response.choices || !response.choices[0]) {
+      return res.status(503).json({ error: { message: 'Le serveur demarre. Attendez 30 secondes puis reessayez.' } });
+    }
+
     const choice = response.choices[0];
     const assistantMessage = choice.message;
 
@@ -562,6 +566,12 @@ app.post('/api/chat', async (req, res) => {
             break;
           case 'create_pdf':
             result = { action: 'create_pdf', filename: fnArgs.filename, title: fnArgs.title, paragraphs: fnArgs.paragraphs, markdown: fnArgs.markdown };
+            break;
+          case 'create_cv':
+            result = { action: 'create_cv', ...fnArgs };
+            break;
+          case 'play_music':
+            result = { action: 'play_music', query: fnArgs.query, action: fnArgs.action || 'play' };
             break;
           case 'web_search':
             result = await webSearch(fnArgs.query, fnArgs.numResults);
