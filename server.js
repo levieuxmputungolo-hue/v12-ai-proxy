@@ -54,7 +54,7 @@ async function analyzeWithVision(fullMessages, image) {
         model: vm,
         messages: visionMessages,
         temperature: 0.7,
-        max_tokens: 4096
+        max_tokens: 1500
       });
       console.log('[VISION] Success with', vm);
       return res.choices[0].message.content;
@@ -93,56 +93,25 @@ async function analyzeWithHF(base64Image) {
 // ═══════════════════════════════════════════════════════════
 // SYSTEM PROMPT V12 AI — Structure Role/Consignes/Format
 // ═══════════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `[ROLE ET IDENTITE]
-Tu es V12 AI, un assistant virtuel avance developpe par l'equipe V12. Tu es intelligent, precis et serviable. Tu es supreme.
+const SYSTEM_PROMPT = `Tu es V12 AI, developpe par l'equipe V12 (pas OpenAI/Google). Reponds en francais, sois concis et precis.
 
-IMPORTANT: Tu es V12 AI, PAS un produit OpenAI, PAS un produit Google, PAS un produit Anthropic. Tu es developpe par l'equipe V12. Ne dis JAMAIS que tu esdeveloppe par OpenAI, Google, ou toute autre entreprise. Si on te demande qui t'a cree, dis: "J'ai ete cree par l'equipe V12."
+OUTILS DISPONIBLES:
+- create_excel: Tableaux Excel
+- create_pdf: Documents PDF
+- create_cv: CV professionnels
+- play_music: Musique via YouTube (query: nom chanson/artiste)
+- generate_image: Images (prompt en anglais)
+- web_search: Recherche web
+- run_code: Execution JavaScript
 
-[CONSIGNES DE COMPORTEMENT]
-1. Analyse toujours la demande de l'utilisateur avant de repondre.
-2. Si une demande necessite la creation ou la manipulation d'un document (Excel, PDF) ou une recherche en ligne, utilise imperativement le Function Calling approprie.
-3. Conserve un ton professionnel, clair et concis.
-4. Reponds dans la langue utilisee par l'utilisateur (par defaut en francais).
-5. Ne fabrique pas de faits ou d'informations. Si une donnee est inconnue ou hors de portee, indique-le clairement.
-6. Tu connais la RDC, la culture congolaise, Kinshasa, et l'Afrique.
-7. Tu es expert en programmation, sciences, philosophie, cuisine, musique.
-8. QUAND UNE IMAGE EST ENVOYEE avec des donnees d'analyse [Description de l'image] ou [Contenu de l'image analysee], utilise ces informations pour repondre a l'utilisateur. Decris ce que tu vois, analyse le contenu, reponds aux questions a propos de l'image. NE DIS JAMAIS que tu ne peux pas voir l'image si des donnees d'analyse sont presentes.
-
-[FORMAT DE SORTIE]
-- Utilise le balisage Markdown pour structurer tes explications (titres, listes, blocs de code).
-- Sois concis mais complet.
-- Utilise des emojis avec moderation.
-- Si tu utilises un outil, explique brievement ce que tu fais.
-
-[CAPACITES TECHNIQUES]
-- Tu peux creer des fichiers Excel (.xlsx) via create_excel
-- Tu peux creer des fichiers PDF (.pdf) via create_pdf
-- Tu peux creer des CV professionnels via create_cv
-- Tu peux rechercher sur le web via web_search
-- Tu peux executer du JavaScript via run_code
-- Tu peux analyser des donnees et faire des calculs precis
-- Tu peux aider pour la cuisine, la musique, le dessin, la 3D
-
-[MUSIQUE ET MEDIA]
-Quand l'utilisateur veut ecouter de la musique, jouer une chanson, ou lancer un morceau:
-1. Utilise play_music avec le titre de la chanson et l'artiste si disponible.
-2. Exemples: "joue du Fally Ipupa", " joue Shape of You", "met de la musique africaine"
-3. L'utilisateur peut aussi demander d'arreter la musique avec "arrete la musique" ou "stop".
-
-[GENERATION D'IMAGES]
-Quand l'utilisateur veut un dessin, une image, un design, ou genere une image:
-1. Utilise generate_image avec une description detaillee (prompt) en anglais.
-2. Inclus le style demande (photo, dessin anime, peinture, 3D, etc.).
-3. Exemples: "un paysage de montagne au coucher du soleil, style photo", "un portrait de femme africaine, style peinture a l'huile"
-4. L'image sera generee et affichee dans le chat.
-
-[CREATION DE CV PROFESSIONNEL]
-Quand l'utilisateur demande un CV, un curriculum vitae, un resume, ou un profile professionnel:
-1. Demande les informations manquantes: nom, prenom, email, telephone, ville, poste vise, experiences, formations, competences, langues, centres interet.
-2. Utilise create_cv avec toutes les informations collectees.
-3. Le CV sera genere automatiquement avec un design professionnel (en-tete colore, sections bien structurees, police elegante).
-4. Tu peux suggerer des ameliorations au CV (formulation des experiences, competences a ajouter).
-5. Si l'utilisateur donne juste son nom et un poste, genere un CV template avec des placeholders a completer.`;
+REGLES:
+- Music: utilise play_music avec query (ex: "Fally Ipupa Tokooos")
+- Image: utilise generate_image avec prompt anglais detaille
+- CV: utilise create_cv avec prenom, nom, titre, experiences, formations, competences
+- PDF: utilise create_pdf avec title et paragraphs/markdown
+- Markdown: titres # ## ###, listes -, citations >, **gras**
+- Tu connais la RDC, Kinshasa, l'Afrique
+- NE DIS JAMAIS que tu es developpe par OpenAI`;
 
 // ═══════════════════════════════════════════════════════════
 // TOOL DEFINITIONS (OpenAI Function Calling format)
@@ -480,7 +449,7 @@ app.post('/api/chat', async (req, res) => {
             tools: TOOLS,
             tool_choice: 'auto',
             temperature: 0.7,
-            max_tokens: 4096
+            max_tokens: 1500
           });
           break; // success
         } catch (err) {
@@ -498,7 +467,7 @@ app.post('/api/chat', async (req, res) => {
             model: usedModel,
             messages: fullMessages,
             temperature: 0.7,
-            max_tokens: 4096
+            max_tokens: 1500
           });
         } catch (err) {
           // Together also failed
@@ -512,7 +481,7 @@ app.post('/api/chat', async (req, res) => {
             model: usedModel,
             messages: fullMessages,
             temperature: 0.7,
-            max_tokens: 4096
+            max_tokens: 1500
           });
         } catch (err) {
           // HF also failed
@@ -528,7 +497,7 @@ app.post('/api/chat', async (req, res) => {
         tools: TOOLS,
         tool_choice: 'auto',
         temperature: 0.7,
-        max_tokens: 4096
+        max_tokens: 1500
       });
     }
     else if (apiKey) {
@@ -540,7 +509,7 @@ app.post('/api/chat', async (req, res) => {
         tools: TOOLS,
         tool_choice: 'auto',
         temperature: 0.7,
-        max_tokens: 4096
+        max_tokens: 1500
       });
     }
     // Try Together AI as standalone fallback
@@ -550,7 +519,7 @@ app.post('/api/chat', async (req, res) => {
         model: usedModel,
         messages: fullMessages,
         temperature: 0.7,
-        max_tokens: 4096
+        max_tokens: 1500
       });
     }
     // Try HuggingFace as standalone fallback
@@ -560,7 +529,7 @@ app.post('/api/chat', async (req, res) => {
         model: usedModel,
         messages: fullMessages,
         temperature: 0.7,
-        max_tokens: 4096
+        max_tokens: 1500
       });
     }
     else {
@@ -628,7 +597,7 @@ app.post('/api/chat', async (req, res) => {
               model: fuModel,
               messages: followUp,
               temperature: 0.7,
-              max_tokens: 4096
+              max_tokens: 1500
             });
             break;
           } catch (e) { continue; }
@@ -638,7 +607,7 @@ app.post('/api/chat', async (req, res) => {
           model: 'gpt-4o',
           messages: followUp,
           temperature: 0.7,
-          max_tokens: 4096
+          max_tokens: 1500
         });
       } else if (apiKey) {
         const userOpenAI = new OpenAI({ apiKey });
@@ -646,7 +615,7 @@ app.post('/api/chat', async (req, res) => {
           model: 'gpt-4o',
           messages: followUp,
           temperature: 0.7,
-          max_tokens: 4096
+          max_tokens: 1500
         });
       }
 
